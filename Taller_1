@@ -1,0 +1,108 @@
+%Taller 1
+%Johanna Gabriela Coronel Criollo
+clear; close all; clc;
+
+% Lectura de datos 
+table = readtable("data_motor.csv");
+t = table.time_t_;
+u = table.ex_signal_u_;
+y = table.system_response_y_;
+
+% Identificación de parámetros básicos 
+K = (max(y) - min(y)) / (max(u) - min(u));  % Ganancia aproximada
+y0 = min(y);
+
+% Detectar retardo (theta) de forma robusta (corrige off-by-one)
+dy = diff(y);                                % derivada discreta aproximada
+threshold = 0.02 * max(abs(dy));             % umbral 2% de la pendiente máxima
+idx_start = find(abs(dy) > threshold, 1, 'first');
+
+if isempty(idx_start)
+    % Si no se detecta claramente, asumimos theta = 0
+    warning('No se detectó claramente el inicio de la respuesta. theta = 0 asumido.');
+    theta = 0;
+else
+    % dy(k) = y(k+1)-y(k) -> el cambio corresponde a t(k+1)
+    theta = t(idx_start + 1);
+end
+
+% Estimación de tau basada en tiempo para llegar al 63.2% del cambio (si es posible)
+y_init = mean(y(1:min(5,end)));               % valor inicial promedio (primeros 5 puntos)
+y_final = mean(y(max(1,length(y)-4):end));    % valor final promedio (últimos 5 puntos)
+target63 = y_init + 0.632 * (y_final - y_init);
+
+% Buscar primer índice después de theta donde y >= target63
+idx_tau = find(t > theta & y >= target63, 1, 'first');
+if isempty(idx_tau)
+    % Si no se encuentra, conserva la tau inicial que usas
+    tau = 0.5;
+else
+    tau = t(idx_tau) - theta;
+    if tau <= 0
+        tau = 0.5; % fallback razonable
+    end
+end
+
+% Imprimir parámetros iniciales
+fprintf('\n--- Parámetros estimados inicialmente ---\n');
+fprintf('K = %.4f\n', K);
+fprintf('tau (estimado 63%%) = %.4f s\n', tau);
+fprintf('theta (retardo) = %.4f s\n', theta);
+
+% Modelo Analítico (primer orden con retardo) 
+num = K;
+den = [tau 1];
+G = tf(num, den, 'InputDelay', theta);
+[y_analitico, t_model] = lsim(G, u, t);
+
+% Modelos aproximados de identificación (heurísticos) 
+% Ziegler & Nichols 
+Kzn = K;
+Tzn = 1.5 * tau;     % factor heurístico 1.5
+tauzn = theta;
+y_zn = Kzn * (1 - exp(-(t - tauzn)/Tzn)) .* (t > tauzn);
+
+% Miller 
+Km = K;
+Tm = 0.8 * tau;      % factor heurístico 0.8
+taum = 0.7 * theta;  % factor heurístico 0.7
+y_miller = Km * (1 - exp(-(t - taum)/Tm)) .* (t > taum);
+
+% Señal escalón 
+u_escalon = u * max(y) * 1;
+
+% Calcular errores (MSE) entre medición y modelos 
+mse_analit = mean((y - y_analitico).^2);
+mse_zn    = mean((y - y_zn).^2);
+mse_mill  = mean((y - y_miller).^2);
+
+% Mostrar resultados 
+fprintf('\n--- Resultados (valores y MSE) ---\n');
+fprintf('Analítico:  K = %.4f , tau = %.4f s , theta = %.4f s , MSE = %.6f\n', K, tau, theta, mse_analit);
+fprintf('Ziegler:    K = %.4f , Tzn = %.4f s , tauzn = %.4f s , MSE = %.6f\n', Kzn, Tzn, tauzn, mse_zn);
+fprintf('Miller:     K = %.4f , Tm = %.4f s , taum = %.4f s , MSE = %.6f\n', Km, Tm, taum, mse_mill);
+
+% Gráfica 
+figure;
+hold on; grid on;
+
+% Señal escalón
+plot(t, u_escalon, 'Color', [0 0.6 0], 'LineWidth', 2, 'DisplayName', 'Senal escalon');
+
+% Respuesta del proceso
+plot(t, y, 'b', 'LineWidth', 1.5, 'DisplayName', 'Respuesta del proceso');
+
+% Modelos
+plot(t, y_zn, 'Color', [0.8 0.4 0], 'LineWidth', 1.5, 'DisplayName', 'Ziegler & Nichols (heurístico)');
+plot(t, y_miller, 'Color', [1 0.8 0], 'LineWidth', 1.5, 'DisplayName', 'Miller (heurístico)');
+plot(t_model, y_analitico, 'm', 'LineWidth', 1.5, 'DisplayName', 'Analitico (FOPDT)');
+
+% Líneas base y 100%
+yline(0, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Linea base');
+yline(1, 'k--', 'LineWidth', 1.5, 'DisplayName', 'Linea 100%');
+
+xlabel('Tiempo (s)');
+ylabel('Amplitud');
+title('Identificacion grafica');
+legend('Location', 'best');
+hold off;
