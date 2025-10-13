@@ -1,0 +1,152 @@
+%% Actividad Reto
+clearvars -except G_delay;
+
+% ------------------------
+% Parámetros editables
+% -------------------------
+add_noise = false;      % sin ruido
+save_figs = true;       % guarda las figuras como PNG en carpeta actual
+% -------------------------
+
+% Asegurar que G_delay exista
+if ~exist('G_delay','var') || isempty(G_delay)
+    % Definir sistema ejemplo con retardo de 2 s 
+    num = 3; den = [1 2 3];
+    G_delay = tf(num, den, 'InputDelay', 2);
+    fprintf('G_delay no existía: se creó un sistema ejemplo con InputDelay = 2 s.\n');
+else
+    fprintf('G_delay detectado en workspace.\n');
+end
+
+% --- Tiempo de simulación ---
+t_reto = linspace(0, 40, 2000)';   % 0..40 s, resolución suficiente
+
+% --- Definir puntos de quiebre y niveles (fácil de ajustar) ---
+% Definimos la señal por tramos (ejemplo inspirado en la imagen de referencia):
+% 0 - 6   : rampa 0 -> 4
+% 6 - 12  : nivel 4
+% 12 - 18 : rampa 4 -> 12
+% 18 - 24 : nivel 12
+% 24 - 30 : rampa descendente 12 -> 5
+% 30 - 40 : nivel 5
+
+% Ajusta tb y vb si quieres otros tiempos/niveles
+tb = [0, 6, 12, 18, 24, 30, 40];          % tiempos de cambios
+vb = [0, 4, 4, 12, 12, 5, 5];             % niveles en esos intervalos (piecewise)
+
+% Construir señal con interp1 'previous' + interpolación lineal para rampas
+% Para conseguir rampas en los intervalos que queremos, construimos de forma manual:
+s_reto = zeros(size(t_reto));
+
+% tramo 0-6: rampa 0->4
+idx = t_reto >= tb(1) & t_reto < tb(2);
+s_reto(idx) = (t_reto(idx) - tb(1)) / (tb(2)-tb(1)) * (vb(2)-vb(1)) + vb(1);
+
+% tramo 6-12: nivel 4 (constante)
+idx = t_reto >= tb(2) & t_reto < tb(3);
+s_reto(idx) = vb(2);
+
+% tramo 12-18: rampa 4->12
+idx = t_reto >= tb(3) & t_reto < tb(4);
+s_reto(idx) = (t_reto(idx) - tb(3)) / (tb(4)-tb(3)) * (vb(4)-vb(3)) + vb(3);
+
+% tramo 18-24: nivel 12
+idx = t_reto >= tb(4) & t_reto < tb(5);
+s_reto(idx) = vb(4);
+
+% tramo 24-30: rampa descendente 12->5
+idx = t_reto >= tb(5) & t_reto < tb(6);
+s_reto(idx) = (t_reto(idx) - tb(5)) / (tb(6)-tb(5)) * (vb(6)-vb(5)) + vb(5);
+
+% tramo 30-40: nivel 5
+idx = t_reto >= tb(6) & t_reto <= tb(7);
+s_reto(idx) = vb(6);
+
+
+% --- Mostrar la señal de entrada ---
+h_fig1 = figure('Name','Actividad Reto - Entrada (rampas y escalones)','NumberTitle','off');
+
+plot(t_reto, s_reto, 'LineWidth', 1.6);
+grid on; xlabel('Tiempo [s]'); ylabel('Amplitud');
+title('Actividad Reto - Señal de entrada (rampas y escalones)');
+xlim([t_reto(1) t_reto(end)]);
+ylim([min(s_reto)-0.5 max(s_reto)+0.5]);
+
+if save_figs
+    try
+        saveas(h_fig1, fullfile(pwd,'ActividadReto_Entrada_Limpia.png'));
+        fprintf('Figura entrada guardada: ActividadReto_Entrada_Limpia.png\n');
+    catch
+        warning('No se pudo guardar la figura de entrada.');
+    end
+end
+
+% --- Simular respuesta con el sistema  ---
+try
+    y_reto = lsim(G_delay, s_reto, t_reto);
+catch ME
+    error('Error al simular con lsim: %s\nAsegura que G_delay es tf con InputDelay o ajusta sistema.', ME.message);
+end
+
+% --- Graficar entrada y salida en la misma figura (comparativa) ---
+h_fig2 = figure('Name','Actividad Reto - Entrada vs Salida','NumberTitle','off');
+plot(t_reto, y_reto, 'LineWidth', 1.6); hold on;
+plot(t_reto, s_reto, '--', 'LineWidth', 1.1);         % entrada en línea punteada
+grid on; xlabel('Tiempo [s]'); ylabel('Amplitud');
+legend('Salida','Entrada (referencia)','Location','best');
+title('Actividad Reto - Respuesta de G(s) con retardo a la señal compuesta');
+xlim([t_reto(1) t_reto(end)]);
+
+% Marcar máximo de la respuesta
+[y_reto_max, idx_yreto_max] = max(y_reto);
+t_yreto_max = t_reto(idx_yreto_max);
+plot(t_yreto_max, y_reto_max, 'ro', 'MarkerSize',8, 'DisplayName','Máximo');
+
+% --- Evitar error de vertcat al ajustar ylim (forzar columnas y usar nan padding) ---
+y_col = y_reto(:);
+s_col = s_reto(:);
+nmax = max(length(y_col), length(s_col));
+if length(y_col) < nmax, y_col(end+1:nmax,1) = NaN; end
+if length(s_col) < nmax, s_col(end+1:nmax,1) = NaN; end
+allMin = nanmin([y_col; s_col]); allMax = nanmax([y_col; s_col]);
+if ~isnan(allMin) && ~isnan(allMax)
+    margin = 0.5;
+    ylim([allMin - margin, allMax + margin]);
+end
+box on;
+
+if save_figs
+    try
+        saveas(h_fig2, fullfile(pwd,'ActividadReto_EntradaVsSalida_Limpia.png'));
+        fprintf('Figura entrada vs salida guardada: ActividadReto_EntradaVsSalida_Limpia.png\n');
+    catch
+        warning('No se pudo guardar la figura comparativa.');
+    end
+end
+
+% --- Métricas: RMS y tiempo de inicio (notar: retardo genera desfase en RMS) ---
+err = y_reto - s_reto;
+RMS_error = sqrt(mean(err.^2));
+fprintf('RMS error (entrada vs salida) = %.6f\n', RMS_error);
+
+% Estimar tiempo de inicio de la respuesta (umbral relativo pequeño)
+umbral = max(abs(y_reto)) * 1e-3;
+idx_inicio = find(abs(y_reto) > umbral, 1, 'first');
+if isempty(idx_inicio)
+    t_inicio_reto = NaN;
+    fprintf('No se detectó inicio de respuesta con el umbral definido.\n');
+else
+    t_inicio_reto = t_reto(idx_inicio);
+    fprintf('Tiempo estimado de inicio de respuesta = %.3f s\n', t_inicio_reto);
+end
+
+% Guardar resultados en archivo MAT
+resultado_reto.t = t_reto;
+resultado_reto.s = s_reto;
+resultado_reto.y = y_reto;
+resultado_reto.RMS = RMS_error;
+resultado_reto.t_inicio = t_inicio_reto;
+resultado_reto.y_max = y_reto_max;
+resultado_reto.t_ymax = t_yreto_max;
+save('resultado_actividad_reto_limpio.mat','resultado_reto');
+fprintf('Resultados guardados en resultado_actividad_reto_limpio.mat\n');
