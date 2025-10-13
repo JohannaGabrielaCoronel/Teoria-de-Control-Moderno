@@ -1,0 +1,182 @@
+%% Taller 2 - Respuesta de un sistema a señales arbitrarias
+% Archivo: taller2_actividadreto.m
+%Johanna Gabriela Coronel Criollo
+clear; close all; clc;
+
+%% Parámetros del sistema
+% Función de transferencia:
+%          3
+% G(s)= ---------
+%       s^2+2s+3
+num = [3];
+den = [1 2 3];
+G = tf(num, den); % sistema continuo sin retardo
+
+% Definir el sistema con retardo (InputDelay = 2 s) para las actividades que lo requieran
+delay_sec = 2;
+G_delay = tf(num, den, 'InputDelay', delay_sec);
+
+%% 1) Respuesta a señales típicas: impulso y escalón (sin delay)
+tfinal = 10;                    % tiempo final para simulaciones
+t = linspace(0, tfinal, 1000);  % vector de tiempo
+
+% --- Impulso ---
+[yi, ti] = impulse(G, t);
+figure('Name','Respuesta al Impulso (sin delay)');
+plot(ti, yi, 'LineWidth', 1.5);
+grid on; xlabel('Tiempo [s]'); ylabel('Salida'); title('Respuesta al Impulso de G(s)');
+% marcar máximo
+[yi_max, idxi_max] = max(yi);
+ti_max = ti(idxi_max);
+hold on; plot(ti_max, yi_max, 'ro', 'MarkerSize',8, 'DisplayName','Máximo');
+legend('Respuesta impulso','Máximo','Location','best');
+
+% --- Escalón ---
+[ys, ts] = step(G, t);
+figure('Name','Respuesta al Escalón (sin delay)');
+plot(ts, ys, 'LineWidth', 1.5);
+grid on; xlabel('Tiempo [s]'); ylabel('Salida'); title('Respuesta al Escalón de G(s)');
+% marcar máximo
+[ys_max, idxs_max] = max(ys);
+ts_max = ts(idxs_max);
+hold on; plot(ts_max, ys_max, 'ro', 'MarkerSize',8, 'DisplayName','Máximo');
+legend('Respuesta escalón','Máximo','Location','best');
+
+%% 2) Sistema con retardo: graficar impulse y step (con delay)
+% Para visualizar el efecto del retardo usamos G_delay
+t_delay = linspace(0, tfinal+delay_sec, 1200);
+
+[yid, tid] = impulse(G_delay, t_delay);
+figure('Name','Impulso (con retardo)');
+plot(tid, yid, 'LineWidth', 1.5);
+grid on; xlabel('Tiempo [s]'); ylabel('Salida'); title(sprintf('Respuesta al Impulso de G(s) con retardo de %g s', delay_sec));
+% marcar máximo
+[yid_max, idyid_max] = max(yid);
+tid_max = tid(idyid_max);
+hold on; plot(tid_max, yid_max, 'ro', 'MarkerSize',8);
+
+[ysd, tsd] = step(G_delay, t_delay);
+figure('Name','Escalón (con retardo)');
+plot(tsd, ysd, 'LineWidth', 1.5);
+grid on; xlabel('Tiempo [s]'); ylabel('Salida'); title(sprintf('Respuesta al Escalón de G(s) con retardo de %g s', delay_sec));
+% marcar máximo
+[ysd_max, idysd_max] = max(ysd);
+tsd_max = tsd(idysd_max);
+hold on; plot(tsd_max, ysd_max, 'ro', 'MarkerSize',8);
+
+%% 3) Analizar tiempo en que el sistema empieza a responder (por retardo)
+umbral = 1e-3; % umbral para considerar "inicio de respuesta"
+idx_inicio_imp = find(abs(yid) > umbral, 1, 'first');
+t_inicio_imp = tid(idx_inicio_imp); % debería ser aproximadamente delay_sec
+idx_inicio_step = find(abs(ysd - ysd(1)) > umbral, 1, 'first');
+t_inicio_step = tsd(idx_inicio_step);
+
+fprintf('Tiempo estimado de inicio de respuesta (impulso con retardo): %.4f s\n', t_inicio_imp);
+fprintf('Tiempo estimado de inicio de respuesta (escalón con retardo): %.4f s\n', t_inicio_step);
+
+%% 4) Respuesta a señales arbitrarias (Figura 2.2)
+% Señal escalonada tipo figura 2.2: 0->5 en t=10s, 5->10 en t=20s
+t22 = linspace(0, 30, 1200);        % tiempo 0..30 s (mejor resolución)
+signal22 = zeros(size(t22));
+% niveles: 0 hasta 10s, 5 de 10s a 20s, 10 desde 20s en adelante
+signal22(t22 >= 10 & t22 < 20) = 5;
+signal22(t22 >= 20) = 10;
+
+% Graficar entrada (escalón) con stairs para aspecto escalonado
+figure('Name','Figura 2.2 - Entrada y respuesta');
+subplot(1,2,1);
+stairs(t22, signal22, '--', 'LineWidth', 1.5);
+grid on; xlabel('Tiempo [s]'); ylabel('Amplitud'); title('(a) Señal arbitraria');
+xlim([0 max(t22)]);
+
+% Simular la respuesta del sistema con retardo 
+y22 = lsim(G_delay, signal22, t22);
+
+% Graficar la respuesta (derecha)
+subplot(1,2,2);
+plot(t22, y22, 'LineWidth', 1.2);
+hold on;
+% para comparar, también mostrar la entrada en gris 
+stairs(t22, signal22, ':', 'LineWidth', 1, 'Color', [0.7 0.7 0.7]);
+grid on; xlabel('Tiempo [s]'); ylabel('Salida'); title('(b) Respuesta del sistema');
+xlim([0 max(t22)]);
+
+% marcar máximo en la respuesta
+[y22_max, idx_y22_max] = max(y22);
+t22_max = t22(idx_y22_max);
+plot(t22_max, y22_max, 'ro', 'MarkerSize',8, 'DisplayName','Máximo');
+legend('Salida','Entrada (escalón)','Máximo','Location','best');
+
+% guardar figura si lo deseas
+% saveas(gcf, 'Figura_2_2.png');
+
+%% 5) Repetir para la señal de la Figura 2.3
+% Construcción por tramos para reproducir exactamente la figura:
+% - 0 <= t < 10  : nivel 0
+% - 10 <= t < 20 : nivel 5 (constante)
+% - 20 <= t < 30 : rampa lineal desde 15 hasta 25 (linspace)
+% - t >= 30      : nivel 25 (constante)
+
+t23 = linspace(0, 40, 1600);   % tiempo 0..40 s, resolución fina
+signal23 = zeros(size(t23));
+
+% tramo 10..20: nivel 5
+idx1 = t23 >= 10 & t23 < 20;
+signal23(idx1) = 5;
+
+% salto instantáneo en t = 20 a 15, y luego rampa 20->30 de 15 a 25
+idx_ramp = t23 >= 20 & t23 < 30;
+signal23(t23 == 20) = 15; % si existe punto exacto
+% construir rampa para los puntos en (20,30)
+signal23(idx_ramp) = 15 + (t23(idx_ramp)-20) * (25 - 15) / (30 - 20);
+
+% después de 30 s: nivel 25
+signal23(t23 >= 30) = 25;
+
+% asegurar que el valor en t=20 sea exactamente 15
+% si la malla no incluye exactamente t=20, forzamos el valor más cercano:
+[~,k20] = min(abs(t23-20));
+signal23(k20) = 15;
+
+% Graficar la entrada 
+figure('Name','Figura 2.3 - Señal arbitraria','Units','normalized','Position',[0.1 0.1 0.35 0.35]);
+plot(t23, signal23, '--', 'LineWidth', 1.6);
+grid on;
+xlabel('Tiempo [s]');
+ylabel('Amplitud');
+title('Señal arbitraria (Figura 2.3)');
+xlim([0 max(t23)]);
+ylim([min(signal23)-1 max(signal23)+1]);
+
+% Simular respuesta con retardo 
+y23 = lsim(G_delay, signal23, t23);
+
+% Graficar respuesta y entrada en la misma figura 
+figure('Name','Respuesta a señal Figura 2.3 - con retardo','Units','normalized','Position',[0.5 0.12 0.45 0.45]);
+plot(t23, y23, 'LineWidth', 1.5); hold on;
+plot(t23, signal23, ':', 'LineWidth', 1.4, 'Color', [0.5 0.5 0.5]); % entrada como referencia 
+grid on;
+xlabel('Tiempo [s]');
+ylabel('Salida');
+title('Respuesta de G(s) con retardo a señal arbitraria (Fig.2.3)');
+xlim([0 max(t23)]);
+ylim([min([y23; signal23]) - 1, max([y23; signal23]) + 1]);
+
+% Marcar máximo de la respuesta
+[y23_max, idx_y23_max] = max(y23);
+t23_max = t23(idx_y23_max);
+plot(t23_max, y23_max, 'ro', 'MarkerSize', 8, 'DisplayName', 'Máximo');
+
+legend('Salida','Entrada (referencia)','Máximo','Location','best');
+box on;
+
+%% Guardar resultados relevantes en workspace para reporte
+resultado.t_reto = t_reto;
+resultado.s_reto = s_reto;
+resultado.y_reto = y_reto;
+resultado.RMS_error = RMS_error;
+resultado.t_inicio_reto = t_inicio_reto;
+resultado.y_reto_max = y_reto_max;
+resultado.t_yreto_max = t_yreto_max;
+
+save('resultados_taller2_actividadreto.mat', 'resultado');
