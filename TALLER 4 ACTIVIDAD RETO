@@ -1,0 +1,124 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+from scipy import signal
+
+# ------------------------------------------------------------
+# Parámetros del circuito
+# ------------------------------------------------------------
+R = 100.0      # Resistencia [Ohm]
+L = 0.1        # Inductancia [H]
+Cap = 1e-6     # Capacitancia [F]
+
+# Matrices de estado
+A = np.array([[0, 1],
+              [-1/(L*Cap), -R/L]])
+B = np.array([[0],
+              [1/L]])
+D0 = np.array([[0]])
+
+# ------------------------------------------------------------
+# CÓDIGO 1: Respuestas al escalón e impulso
+# ------------------------------------------------------------
+# Sistema 1: Voltaje del capacitor (según código MATLAB original)
+C_v = np.array([[0, 1]])
+sys_v = signal.StateSpace(A, B, C_v, D0)
+
+# Sistema 2: Corriente en el inductor
+C_i = np.array([[1, 0]])
+sys_i = signal.StateSpace(A, B, C_i, D0)
+
+# --- Respuesta del voltaje del capacitor ---
+t1, y1 = signal.step(sys_v)
+plt.figure()
+plt.plot(t1, y1)
+plt.title('Respuesta al Escalón - Voltaje del Capacitor')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Vc [V]')
+plt.grid(True)
+
+t2, y2 = signal.impulse(sys_v)
+plt.figure()
+plt.plot(t2, y2)
+plt.title('Respuesta al Impulso - Voltaje del Capacitor')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Vc [V]')
+plt.grid(True)
+
+# --- Respuesta de la corriente en el inductor ---
+t3, y3 = signal.step(sys_i)
+plt.figure()
+plt.plot(t3, y3)
+plt.title('Respuesta al Escalón - Corriente del Inductor')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('iL [A]')
+plt.grid(True)
+
+t4, y4 = signal.impulse(sys_i)
+plt.figure()
+plt.plot(t4, y4)
+plt.title('Respuesta al Impulso - Corriente del Inductor')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('iL [A]')
+plt.grid(True)
+
+# ------------------------------------------------------------
+# CÓDIGO 2: Integración numérica con entrada constante (u=1)
+# ------------------------------------------------------------
+ts = 0.015
+tspan = (0.0, ts)
+u_const = 1.0
+x0 = np.array([0.0, 0.0])
+
+def modelRLC(t, x, A, B, u):
+    return A.dot(x) + B.flatten() * u
+
+sol = solve_ivp(lambda t, x: modelRLC(t, x, A, B, u_const),
+                tspan, x0, method='RK45', max_step=ts/200)
+
+C = C_v  # Salida según voltaje del capacitor
+y_sol = (C.dot(sol.y) + D0 * u_const).flatten()
+
+plt.figure()
+plt.plot(sol.t, y_sol, linewidth=2)
+plt.title('Simulación con solve_ivp (u = 1)')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Vc [V]')
+plt.grid(True)
+
+# ------------------------------------------------------------
+# CÓDIGO 3: Respuesta a señal arbitraria
+# ------------------------------------------------------------
+fs = 100000                # Frecuencia de muestreo
+tspan_full = np.arange(0, 0.05 + 1/fs, 1/fs)
+N = len(tspan_full)
+
+# Señal de entrada (escalones múltiples)
+u = np.zeros_like(tspan_full)
+u[(tspan_full >= 0.015) & (tspan_full < 0.03)] = 5.0
+u[tspan_full >= 0.03] = 10.0
+
+# Guardar señal en CSV
+df = pd.DataFrame({'time': tspan_full, 'u': u})
+df.to_csv('senal_arbitraria.csv', index=False)
+
+# Sistema con salida = voltaje del capacitor (q / C)
+C_sys3 = np.array([[1/Cap, 0]])
+sys3 = signal.StateSpace(A, B, C_sys3, D0)
+
+# Simulación de la respuesta
+t_resp, y_resp, x_resp = signal.lsim(sys3, U=u, T=tspan_full)
+
+plt.figure(figsize=(8,4))
+plt.plot(t_resp, y_resp, color='purple')
+plt.title('Respuesta del sistema a señal arbitraria')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Vc [V]')
+plt.grid(True)
+
+# Guardar salida en CSV
+out_df = pd.DataFrame({'time': t_resp, 'Vc': y_resp})
+out_df.to_csv('salida_vc.csv', index=False)
+
+plt.show()
