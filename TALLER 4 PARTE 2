@@ -1,0 +1,29 @@
+% Parámetros del circuito
+R = 100;      % Resistencia (ohmios)
+L = 0.1;      % Inductancia (henrios)
+Cap = 1e-6;   % Capacitancia (faradios)
+
+% Matrices de estado
+A = [0 1; -1/(L*Cap) -R/L];
+B = [0; 1/L];
+
+% --- Sistema 1: Voltaje en el capacitor ---
+C_v = [0 1];   % salida = vC
+D = 0;
+ 
+ ts = 0.015;
+ % Tiempo de simulación
+ tspan = [0 ts];
+ u = 1;
+ x0 = [0; 0];
+ % Voltaje de entrada
+ % Condiciones iniciales
+ [t, X] = ode45(@(t,x) modelRLC(t, x, A, B, u), tspan, x0);
+ y = C * X.' + D * u;
+ plot(t,y, 'Linewidth', 2);
+ grid on
+ xlabel('Time[s]'); ylabel ('Vc[V]')
+ function dx = modelRLC(t, x, A, B, u)
+ dx = A * x + B * u;
+ % Ecuación de Estado
+ end
