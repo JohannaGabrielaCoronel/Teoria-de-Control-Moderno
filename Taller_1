@@ -12,7 +12,7 @@ y = table.system_response_y_;
 K = (max(y) - min(y)) / (max(u) - min(u));  % Ganancia aproximada
 y0 = min(y);
 
-% Detectar retardo (theta) de forma robusta (corrige off-by-one)
+% Detectar retardo (theta) 
 dy = diff(y);                                % derivada discreta aproximada
 threshold = 0.02 * max(abs(dy));             % umbral 2% de la pendiente máxima
 idx_start = find(abs(dy) > threshold, 1, 'first');
