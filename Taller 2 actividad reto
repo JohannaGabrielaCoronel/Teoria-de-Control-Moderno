@@ -1,0 +1,84 @@
+%% Actividad Reto
+%Johanna Gabriela Coronel Criollo
+clear; close all; clc;
+
+%Parámetros del sistema
+num = 3; 
+den = [1 2 3];
+G_delay = tf(num, den, 'InputDelay', 2);
+
+%Tiempo de simulación 
+t_reto = linspace(0, 40, 2000)';   
+
+%Definimos la señal aleatoria
+% 0 - 6   : rampa 0 -> 4
+% 6 - 12  : nivel 4
+% 12 - 18 : rampa 4 -> 12
+% 18 - 24 : nivel 12
+% 24 - 30 : rampa descendente 12 -> 5
+% 30 - 40 : nivel 5
+tb = [0, 6, 12, 18, 24, 30, 40];          % tiempos de cambios
+vb = [0, 4, 4, 12, 12, 5, 5];             % niveles en esos intervalos 
+s_reto = zeros(size(t_reto));
+%tramo 0-6: rampa 0->4
+idx = t_reto >= tb(1) & t_reto < tb(2);
+s_reto(idx) = (t_reto(idx) - tb(1)) / (tb(2)-tb(1)) * (vb(2)-vb(1)) + vb(1);
+%tramo 6-12: nivel 4 (constante)
+idx = t_reto >= tb(2) & t_reto < tb(3);
+s_reto(idx) = vb(2);
+%tramo 12-18: rampa 4->12
+idx = t_reto >= tb(3) & t_reto < tb(4);
+s_reto(idx) = (t_reto(idx) - tb(3)) / (tb(4)-tb(3)) * (vb(4)-vb(3)) + vb(3);
+%tramo 18-24: nivel 12
+idx = t_reto >= tb(4) & t_reto < tb(5);
+s_reto(idx) = vb(4);
+%tramo 24-30: rampa descendente 12->5
+idx = t_reto >= tb(5) & t_reto < tb(6);
+s_reto(idx) = (t_reto(idx) - tb(5)) / (tb(6)-tb(5)) * (vb(6)-vb(5)) + vb(5);
+%tramo 30-40: nivel 5
+idx = t_reto >= tb(6) & t_reto <= tb(7);
+s_reto(idx) = vb(6);
+
+%Graficar la señal de entrada 
+h_fig1 = figure('Name','Actividad Reto - Entrada (rampas y escalones)','NumberTitle','off');
+plot(t_reto, s_reto, 'LineWidth', 1.6);
+grid on; xlabel('Tiempo [s]'); ylabel('Amplitud');
+title('Actividad Reto - Señal de entrada (rampas y escalones)');
+xlim([t_reto(1) t_reto(end)]);
+ylim([min(s_reto)-0.5 max(s_reto)+0.5]);
+
+%Respuesta con el sistema  
+y_reto = lsim(G_delay, s_reto, t_reto);
+
+%Graficar entrada y salida en la misma figura
+h_fig2 = figure('Name','Actividad Reto - Entrada vs Salida','NumberTitle','off');
+plot(t_reto, y_reto, 'LineWidth', 1.6); hold on;
+plot(t_reto, s_reto, '--', 'LineWidth', 1.1);         % entrada en línea punteada
+grid on; xlabel('Tiempo [s]'); ylabel('Amplitud');
+legend('Salida','Entrada (referencia)','Location','best');
+title('Actividad Reto - Respuesta de G(s) con retardo a la señal compuesta');
+xlim([t_reto(1) t_reto(end)]);
+
+%Marcar máximo de la respuesta
+[y_reto_max, idx_yreto_max] = max(y_reto);
+t_yreto_max = t_reto(idx_yreto_max);
+plot(t_yreto_max, y_reto_max, 'ro', 'MarkerSize',8, 'DisplayName','Máximo');
+
+
+%Métricas: RMS y tiempo de inicio
+err = y_reto - s_reto;
+RMS_error = sqrt(mean(err.^2));
+fprintf('RMS error (entrada vs salida) = %.6f\n', RMS_error);
+
+%Estimar tiempo de inicio de la respuesta 
+umbral = max(abs(y_reto)) * 1e-3;
+idx_inicio = find(abs(y_reto) > umbral, 1, 'first');
+if isempty(idx_inicio)
+    t_inicio_reto = NaN;
+    fprintf('No se detectó inicio de respuesta con el umbral definido.\n');
+else
+    t_inicio_reto = t_reto(idx_inicio);
+    fprintf('Tiempo estimado de inicio de respuesta = %.3f s\n', t_inicio_reto);
+end
+
+
