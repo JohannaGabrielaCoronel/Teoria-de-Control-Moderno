@@ -1,0 +1,183 @@
+PRACTICA 4
+4.3.2 Espacio de estados en Matlab
+% Parámetros del circuito
+R = 100;      % Resistencia (ohmios)
+L = 0.1;      % Inductancia (henrios)
+Cap = 1e-6;   % Capacitancia (faradios)
+
+A = [0 1/Cap; -1/L -R/L];     % Matriz de Estado
+B = [0; 1/L];                   % Matriz de entrada
+C = [1 0];                    % Matriz de Salida
+D = 0;                          % Matriz de transferencia directa
+
+% 1. Declare un sistema en espacio de estados
+EE = ss(A,B,C,D);
+
+% 2. Usando subplots, grafique la respuesta del sistema a un escalón unitario y a un impulso
+
+figure;
+subplot(2,1,1);
+step(EE);
+xlabel('Time [s]');
+ylabel('Vc [V]');
+title('Respuesta al Escalón');
+
+subplot(2,1,2);
+impulse(EE);
+xlabel('Time [s]');
+ylabel('Vc [V]');
+title('Respuesta al Impulso');
+
+% 3. Agregue al segundo estado como variable de salida. 
+
+y = [0 1];  
+EE_2 = ss(A,B,y,D);
+
+% 4. Grafique la respuesta al escalón e impulso de esta nueva salida
+
+figure;
+subplot(2,1,1);
+step(EE_2);
+xlabel('Time [s]');
+ylabel('i [A]');
+title('Respuesta al Escalón');
+
+subplot(2,1,2);
+impulse(EE_2);
+xlabel('Time [s]');
+ylabel('i [A]');
+title('Respuesta al Impulso');
+4.3.3 Transformación de representaciones
+% Parámetros del circuito
+R = 100;      % Resistencia (ohmios)
+L = 0.1;      % Inductancia (henrios)
+Cap = 1e-6;   % Capacitancia (faradios)
+
+A = [0 1/Cap; -1/L -R/L];     % Matriz de Estado
+B = [0; 1/L];                   % Matriz de entrada
+Cy = [0 1];                    % Matriz de Salida
+D = 0;                          % Matriz de transferencia directa
+
+% 1. Obtenga la función de transferencia de la corriente del circuito RLC
+% usando ss2tf
+[num, den] = ss2tf(A, B, Cy, D);
+TF = tf(num, den);
+
+% 2. Gráfique su respuesta al escalón
+figure;
+step(TF);
+xlabel('Time [s]');
+ylabel('i [A]');
+title('Respuesta al Escalón con funcion de transferencia del segundo estado');
+
+% 3. Convierta la función de transferencia a un modelo en espacio de
+% estados
+[num, den] = tfdata(TF);
+[A2, B2, C2, D2] = tf2ss(num{1}, den{1});
+EE3 = ss(A2, B2, C2, D2);
+
+% 4. Gráfique su respuesta al escalón
+figure;
+step(EE3);
+xlabel('Time [s]');
+ylabel('i [A]');
+title('Respuesta al Escalón con espacio de estados a partir de TF');
+
+
+% 5. Respuesta a TF con primer estado
+A3 = [0 1/Cap; -1/L -R/L];     
+B3 = [0; 1/L];                   
+C3 = [1 0];                    
+D3 = 0;                        
+
+[num3, den3] = ss2tf(A3, B3, C3, D3);
+TF3 = tf(num3, den3);
+figure;
+step(TF);
+xlabel('Time [s]');
+ylabel('Vc [V]');
+title('Respuesta al Escalón con funcion de transferencia de primer estado');
+
+4.3.4 Espacio de estados en simulink
+Resuelto en Simulink
+
+4.3.5 Fundamentos de los modelos en espacio de estados
+% Parámetros del circuito
+R = 100;      % Resistencia (ohmios)
+L = 0.1;      % Inductancia (henrios)
+Cap = 1e-6;   % Capacitancia (faradios)
+
+A = [0 1/Cap; -1/L -R/L];   % Matriz de estado
+B = [0; 1/L];               % Entrada
+C = [1 0];                  % Salida (corriente en el inductor)
+D = 0;
+
+ts = 0.015;       % Tiempo de simulación
+u = 1;            % Escalón (entrada constante = 1)
+xo = [0; 0];      % Condiciones iniciales
+
+% Resolver con ode45
+[t, X] = ode45(@(t,x) modelRLC(t, x, A, B, u), [0 ts], xo);
+
+% Calcular salida
+y = (C * X') + D * u;  
+
+% Graficar respuesta al escalón
+figure;
+plot(t, y, 'LineWidth', 2);
+grid on;
+xlabel('Tiempo [s]');
+ylabel('Voltaje Capacitor [V]');
+title('Respuesta al escalón del circuito RLC, usando ode45');
+
+4.3.6 Respuesta a una señal arbitraria
+% Parámetros del circuito
+R = 100;      
+L = 0.1;      
+Cap = 1e-6;   
+
+A = [0 1/Cap; -1/L -R/L];   
+B = [0; 1/L];               
+C = [1 0];                  
+D = 0;
+
+% Tiempo
+t = 0:0.001:0.05;   % vector de tiempo
+x = [0; 0];         % condiciones iniciales
+
+% Definir señal arbitraria por tramos
+u = zeros(size(t));
+
+for k = 1:length(t)
+    if t(k) < 0.01
+        u(k) = 0;
+    elseif t(k) < 0.02
+        u(k) = 5;
+    elseif t(k) < 0.03
+        u(k) = 10;
+    else
+        u(k) = 7;
+    end
+end
+
+% Simulación con ode45
+y = zeros(size(t));
+
+for k = 1:length(t)-1
+    [ts, xs] = ode45(@(t,x) modelRLC(t, x, A, B, u(k)), [t(k) t(k+1)], x);
+    x = xs(end, :)';         % actualizar estado
+    y(k+1) = C*x + D*u(k);   % salida
+end
+
+% Graficar
+figure;
+plot(t, y, 'LineWidth', 2);
+grid on;
+xlabel('Tiempo [s]');
+ylabel('Vc [V]');
+title('Respuesta del sistema a una señal arbitraria');
+
+Función del sistema
+function dx = modelRLC(t, x, A, B, u)
+    dx = A * x + B * u;
+end
